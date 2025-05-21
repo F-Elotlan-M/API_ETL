@@ -99,5 +99,126 @@ exports.agregarUsuario = async (req, res) => {
   }
 };
 
-// Aquí podrías agregar más funciones para otros CUs (listar usuarios, actualizar, etc.)
-// exports.listarUsuarios = async (req, res) => { /* ... */ };
+exports.listarUsuarios = async (req, res) => {
+  try {
+    const usuarios = await Usuario.findAll({
+      attributes: ['id', 'nombre', 'createdAt', 'updatedAt'] // Selecciona los campos que quieres devolver
+    });
+    return res.status(200).json(usuarios);
+  } catch (error) {
+    console.error("Error al listar usuarios:", error);
+    return res.status(500).json({ mensaje: 'Error interno del servidor al listar usuarios.' });
+  }
+};
+
+exports.obtenerPermisosDeUsuario = async (req, res) => {
+  const { idUsuario } = req.params;
+
+  try {
+    const usuario = await Usuario.findByPk(idUsuario, {
+      attributes: ['id', 'nombre'], // Tomamos id y nombre del usuario
+      include: [{
+        model: Permiso,
+        as: 'permisos', // El alias que definimos en la asociación Usuario <-> Permiso
+        attributes: ['id'], // El id del permiso en sí
+        include: [{
+          model: ETL,
+          as: 'etl', // El alias que definimos en la asociación Permiso <-> ETL
+          attributes: ['id', 'nombre', 'descripcion', 'tipo'] // Datos del ETL asociado
+        }]
+      }]
+    });
+
+    if (!usuario) {
+      return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+    }
+
+    // Formatear la respuesta para que sea más útil para el frontend
+    const respuestaFormateada = {
+      idUsuario: usuario.id,
+      nombreUsuario: usuario.nombre,
+      permisos: usuario.permisos.map(p => ({
+        idPermiso: p.id,
+        idEtl: p.etl.id,
+        nombreEtl: p.etl.nombre,
+        descripcionEtl: p.etl.descripcion,
+        tipoEtl: p.etl.tipo
+      }))
+    };
+
+    return res.status(200).json(respuestaFormateada);
+  } catch (error) {
+    console.error(`Error al obtener permisos del usuario ${idUsuario}:`, error);
+    return res.status(500).json({ mensaje: 'Error interno del servidor al obtener los permisos del usuario.' });
+  }
+};
+
+exports.actualizarPermisosUsuario = async (req, res) => {
+  const { idUsuario } = req.params;
+  const { etlIds } = req.body; // Se espera un array de IDs de ETL
+
+  // Validación de entrada
+  if (!Array.isArray(etlIds)) {
+    return res.status(400).json({ mensaje: 'El cuerpo de la solicitud debe contener un arreglo "etlIds".' });
+  }
+  const sonEtlIdsNumerosPositivos = etlIds.every(id => Number.isInteger(id) && id > 0);
+  if (etlIds.length > 0 && !sonEtlIdsNumerosPositivos) { // Permitir array vacío para quitar todos los permisos
+    return res.status(400).json({ mensaje: 'Si se proporcionan, todos los IDs en "etlIds" deben ser números enteros positivos.' });
+  }
+
+  const t = await sequelize.transaction(); // Iniciar transacción
+
+  try {
+    // 1. Verificar que el usuario exista
+    const usuario = await Usuario.findByPk(idUsuario, { transaction: t });
+    if (!usuario) {
+      await t.rollback();
+      return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+    }
+
+    // 2. Verificar que todos los ETLs proporcionados (si los hay) existan
+    if (etlIds.length > 0) {
+      const etlsExistentes = await ETL.findAll({
+        where: { id: { [Op.in]: etlIds } },
+        attributes: ['id'],
+        transaction: t
+      });
+
+      if (etlsExistentes.length !== etlIds.length) {
+        const idsEncontrados = etlsExistentes.map(e => e.id);
+        const idsFaltantes = etlIds.filter(id => !idsEncontrados.includes(id));
+        await t.rollback();
+        return res.status(400).json({ mensaje: `Los siguientes ETLs IDs no existen: ${idsFaltantes.join(', ')}.` });
+      }
+    }
+
+    // 3. Borrar todos los permisos existentes para este usuario
+    await Permiso.destroy({
+      where: { idUsuario: idUsuario },
+      transaction: t
+    });
+
+    // 4. Si se proporcionaron etlIds, crear los nuevos permisos
+    if (etlIds.length > 0) {
+      const nuevosPermisos = etlIds.map(idEtl => ({
+        idUsuario: parseInt(idUsuario), // Asegurarse que sea número
+        idEtl: idEtl
+      }));
+      await Permiso.bulkCreate(nuevosPermisos, { transaction: t });
+    }
+
+    // 5. Confirmar la transacción
+    await t.commit();
+
+    return res.status(200).json({
+      idUsuario: parseInt(idUsuario),
+      etlIdsAsignados: etlIds,
+      mensaje: 'Permisos actualizados correctamente.'
+    });
+
+  } catch (error) {
+    if (t) await t.rollback(); // Asegurarse de rollback si hay error y la transacción existe
+    console.error(`Error al actualizar permisos del usuario ${idUsuario}:`, error);
+    return res.status(500).json({ mensaje: 'Error interno del servidor al actualizar los permisos.' });
+  }
+};

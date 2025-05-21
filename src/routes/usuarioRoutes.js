@@ -12,6 +12,12 @@ const { authenticateToken, isAdmin } = require('../middleware/authMiddleware');
 // router.post('/', [authenticateToken, isAdmin], usuarioController.agregarUsuario);
 router.post('/', usuarioController.agregarUsuario); // Ruta sin protección temporal
 
+// NUEVA RUTA para CU-02: Listar todos los usuarios
+// GET /api/usuarios
+router.get('/', [authenticateToken, isAdmin], usuarioController.listarUsuarios);
+router.get('/:idUsuario/permisos', [authenticateToken, isAdmin], usuarioController.obtenerPermisosDeUsuario);
+
+router.put('/:idUsuario/permisos', [authenticateToken, isAdmin], usuarioController.actualizarPermisosUsuario);
 // Aquí podrías agregar más rutas para usuarios en el futuro:
 // router.get('/', [authenticateToken, isAdmin], usuarioController.listarUsuarios);
 // router.get('/:id', [authenticateToken, isAdmin], usuarioController.obtenerUsuarioPorId);

@@ -8,6 +8,7 @@ const { sequelize } = require('./models');
 
 // Importar las rutas
 const usuarioRoutes = require('./routes/usuarioRoutes'); // <--- AÑADE ESTA LÍNEA
+const etlRoutes = require('./routes/etlRoutes'); // <--- AÑADE ESTA LÍNEA
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,6 +18,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Montar las rutas de la API
 app.use('/api/usuarios', usuarioRoutes); // <--- AÑADE ESTA LÍNEA: Todas las rutas en usuarioRoutes estarán prefijadas con /api/usuarios
+app.use('/api/etls', etlRoutes);
 
 app.get('/', (req, res) => {
   res.send('¡API de ETLs funcionando correctamente!');
