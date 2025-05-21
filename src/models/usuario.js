@@ -18,6 +18,11 @@ module.exports = (sequelize, DataTypes) => {
       unique: {
         msg: 'El nombre de usuario ya está en uso.' // Mensaje de error personalizado
       }
+    },
+    rol: {
+      type: DataTypes.STRING,
+      allowNull: true, 
+      defaultValue: 'consultor'
     }
   }, {
     sequelize,
