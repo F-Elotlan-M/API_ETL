@@ -16,4 +16,7 @@ router.get('/:idEtl', [authenticateToken, isAdmin], etlController.obtenerETLPorI
 // NUEVA RUTA para CU-04: Actualizar un ETL específico por su ID
 router.put('/:idEtl', [authenticateToken, isAdmin], etlController.actualizarETL);
 
+// NUEVA RUTA para CU-05: Eliminar un ETL específico por su ID
+router.delete('/:idEtl', [authenticateToken, isAdmin], etlController.eliminarETL);
+
 module.exports = router;
