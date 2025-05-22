@@ -67,3 +67,101 @@ exports.crearETL = async (req, res) => {
     return res.status(500).json({ mensaje: 'Error interno del servidor al intentar crear el ETL.' });
   }
 };
+
+exports.obtenerETLPorId = async (req, res) => {
+  const { idEtl } = req.params;
+
+  try {
+    const etl = await ETL.findByPk(idEtl, {
+      attributes: ['id', 'nombre', 'tipo', 'descripcion', 'createdAt', 'updatedAt']
+    });
+
+    if (!etl) {
+      return res.status(404).json({ mensaje: `ETL con ID ${idEtl} no encontrado.` });
+    }
+
+    return res.status(200).json(etl);
+
+  } catch (error) {
+    console.error(`Error al obtener ETL con ID ${idEtl}:`, error);
+    return res.status(500).json({ mensaje: 'Error interno del servidor al obtener el ETL.' });
+  }
+};
+
+exports.actualizarETL = async (req, res) => {
+  const { idEtl } = req.params;
+  const { nombre, tipo, descripcion } = req.body;
+
+  // Validación de entrada: al menos un campo debe estar presente para actualizar
+  // aunque la lógica de Sequelize manejará si no hay cambios.
+  // Los campos individuales se validarán si se proporcionan.
+  if (nombre === undefined && tipo === undefined && descripcion === undefined) {
+    return res.status(400).json({ mensaje: 'Se requiere al menos un campo (nombre, tipo o descripcion) para actualizar.' });
+  }
+
+  const camposParaActualizar = {};
+  let nombreTrimmed;
+
+  if (nombre !== undefined) {
+    if (typeof nombre !== 'string' || nombre.trim() === '') {
+      return res.status(400).json({ mensaje: 'Si se proporciona, el campo "nombre" no puede ser vacío.' });
+    }
+    nombreTrimmed = nombre.trim();
+    camposParaActualizar.nombre = nombreTrimmed;
+  }
+
+  if (tipo !== undefined) {
+    // Si tipo es una cadena vacía, se considera una intención de borrarlo (setear a null)
+    // Si es null, también se setea a null.
+    // Si es una cadena no vacía, se trimea.
+    camposParaActualizar.tipo = (typeof tipo === 'string' && tipo.trim() !== '') ? tipo.trim() : null;
+  }
+
+  if (descripcion !== undefined) {
+    camposParaActualizar.descripcion = (typeof descripcion === 'string' && descripcion.trim() !== '') ? descripcion.trim() : null;
+  }
+
+
+  try {
+    const etl = await ETL.findByPk(idEtl);
+
+    if (!etl) {
+      return res.status(404).json({ mensaje: `ETL con ID ${idEtl} no encontrado.` });
+    }
+
+    // Opcional: Verificar unicidad del nombre si se está cambiando y se requiere que sea único
+    // Esta verificación es contra OTROS ETLs.
+    if (nombreTrimmed && nombreTrimmed !== etl.nombre) {
+      const etlExistenteConEseNombre = await ETL.findOne({
+        where: {
+          nombre: nombreTrimmed,
+          id: { [Op.ne]: idEtl } // Excluir el ETL actual de la búsqueda por nombre
+        }
+      });
+      if (etlExistenteConEseNombre) {
+        return res.status(409).json({ mensaje: `Ya existe otro ETL con el nombre '${nombreTrimmed}'.` });
+      }
+    }
+
+    // Actualizar el ETL con los campos proporcionados
+    await etl.update(camposParaActualizar);
+
+    return res.status(200).json({
+      id: etl.id,
+      nombre: etl.nombre,
+      tipo: etl.tipo,
+      descripcion: etl.descripcion,
+      createdAt: etl.createdAt,
+      updatedAt: etl.updatedAt, // Sequelize actualiza updatedAt automáticamente
+      mensaje: 'ETL actualizado exitosamente.'
+    });
+
+  } catch (error) {
+    // if (error.name === 'SequelizeUniqueConstraintError') { // Si tuvieras unique a nivel BD y fallara
+    //   return res.status(409).json({ mensaje: `Error al actualizar ETL: ${error.errors[0].message}` });
+    // }
+    console.error(`Error al actualizar ETL con ID ${idEtl}:`, error);
+    return res.status(500).json({ mensaje: 'Error interno del servidor al actualizar el ETL.' });
+  }
+};
+
