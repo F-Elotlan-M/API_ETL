@@ -165,3 +165,26 @@ exports.actualizarETL = async (req, res) => {
   }
 };
 
+exports.eliminarETL = async (req, res) => {
+  const { idEtl } = req.params;
+
+  try {
+    // 1. Buscar el ETL por su ID
+    const etl = await ETL.findByPk(idEtl);
+
+    // 2. Si el ETL no se encuentra, devolver un error 404
+    if (!etl) {
+      return res.status(404).json({ mensaje: `ETL con ID ${idEtl} no encontrado.` });
+    }
+
+    // 3. Eliminar el ETL
+    await etl.destroy(); // Esto también eliminará en cascada los permisos asociados
+
+    // 4. Responder con un mensaje de éxito
+    return res.status(200).json({ mensaje: `ETL con ID ${idEtl} eliminado exitosamente.` });
+
+  } catch (error) {
+    console.error(`Error al eliminar ETL con ID ${idEtl}:`, error);
+    return res.status(500).json({ mensaje: 'Error interno del servidor al intentar eliminar el ETL.' });
+  }
+};
