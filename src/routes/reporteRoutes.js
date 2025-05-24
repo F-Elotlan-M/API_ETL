@@ -17,4 +17,22 @@ router.get(
   reporteController.obtenerReportesPorFecha
 );
 
+router.post(
+  '/procesamiento',
+  // SIN MIDDLEWARES DE AUTENTICACIÓN DE USUARIO
+  reporteController.registrarReporteProcesamiento
+);
+
+router.post(
+  '/archivo',
+  // SIN MIDDLEWARES DE AUTENTICACIÓN DE USUARIO
+  reporteController.registrarReporteArchivo
+);
+
+router.post(
+  '/alerta',
+  // SIN MIDDLEWARES DE AUTENTICACIÓN DE USUARIO
+  reporteController.registrarReporteAlerta
+);
+
 module.exports = router;

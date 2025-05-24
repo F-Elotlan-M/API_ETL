@@ -154,6 +154,197 @@ components:
         tipo: { type: string, example: 'Batch Mensual', nullable: true }
         descripcion: { type: string, example: 'Descripción actualizada.', nullable: true }
 
+    DetalleProcesamientoData:
+      type: object
+      properties:
+        nombre:
+          type: string
+          description: Nombre del paso o tarea de procesamiento.
+          example: "Carga de Ventas"
+        fecha:
+          type: string
+          format: date-time
+          description: Fecha y hora del paso de procesamiento.
+          example: "2025-05-24T08:01:00Z"
+        nombreArchivo:
+          type: string
+          nullable: true
+          description: Nombre del archivo relevante para este paso (si aplica).
+          example: "ventas_20250523.csv"
+        status:
+          type: string
+          description: Estado del paso de procesamiento.
+          example: "OK"
+        mensaje:
+          type: string
+          nullable: true
+          description: Mensaje descriptivo del paso.
+          example: "15000 filas procesadas."
+      required:
+        - nombre
+        - fecha
+        - status
+
+    RegistrarReporteProcesamientoRequest:
+      type: object
+      properties:
+        idEtl:
+          type: integer
+          description: ID del ETL de tipo Procesamiento que reporta.
+          example: 1
+        fechaReporte:
+          type: string
+          format: date-time
+          description: Fecha y hora de finalización o generación del reporte general.
+          example: "2025-05-24T08:05:00Z"
+        statusGeneral:
+          type: string
+          description: Estado general de la ejecución del ETL (ej. Exitoso, Fallido).
+          example: "Exitoso"
+        detalleProcesamiento:
+          $ref: '#/components/schemas/DetalleProcesamientoData'
+      required:
+        - idEtl
+        - fechaReporte
+        - statusGeneral
+        - detalleProcesamiento
+
+    RegistroReporteProcesamientoResponse:
+      type: object
+      properties:
+        mensaje:
+          type: string
+          example: "Reporte de procesamiento registrado exitosamente."
+        idReporte:
+          type: integer
+          example: 101
+        idDetalleProcesamiento:
+          type: integer
+          example: 201
+
+    # -- Detalle para Reporte de Archivo --
+    DetalleArchivoData:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Estado de la operación de archivo.
+          example: "Error de Acceso"
+        mensaje:
+          type: string
+          nullable: true
+          description: Mensaje descriptivo sobre la operación del archivo.
+          example: "No se pudo acceder al directorio SFTP."
+      required:
+        - status
+
+    RegistrarReporteArchivoRequest:
+      type: object
+      properties:
+        idEtl:
+          type: integer
+          description: ID del ETL de tipo Archivo que reporta.
+          example: 2
+        fechaReporte:
+          type: string
+          format: date-time
+          description: Fecha y hora de finalización o generación del reporte general.
+          example: "2025-05-24T09:10:00Z"
+        statusGeneral:
+          type: string
+          description: Estado general de la ejecución del ETL.
+          example: "Fallido"
+        detalleArchivo:
+          $ref: '#/components/schemas/DetalleArchivoData'
+      required:
+        - idEtl
+        - fechaReporte
+        - statusGeneral
+        - detalleArchivo
+
+    RegistroReporteArchivoResponse:
+      type: object
+      properties:
+        mensaje:
+          type: string
+          example: "Reporte de archivo registrado exitosamente."
+        idReporte:
+          type: integer
+          example: 102
+        idDetalleArchivo:
+          type: integer
+          example: 202
+
+    # -- Detalle para Reporte de Alerta/Ejecución --
+    DetalleAlertaData:
+      type: object
+      properties:
+        nombre:
+          type: string
+          description: Nombre de la alerta o del evento principal de ejecución.
+          example: "Finalización Ejecución ETL Inventario"
+        hostName:
+          type: string
+          nullable: true
+          description: Hostname donde se ejecutó o se generó la alerta.
+          example: "ETLServer02"
+        horaInicio:
+          type: string
+          format: date-time
+          description: Hora de inicio del evento o ejecución.
+          example: "2025-05-24T10:00:00Z"
+        horaFin:
+          type: string
+          format: date-time
+          description: Hora de fin del evento o ejecución.
+          example: "2025-05-24T10:15:00Z"
+        tiempoEjecucion:
+          type: integer
+          nullable: true
+          description: Tiempo de ejecución en milisegundos.
+          example: 900000
+      required:
+        - nombre
+        - horaInicio
+        - horaFin
+
+    RegistrarReporteAlertaRequest:
+      type: object
+      properties:
+        idEtl:
+          type: integer
+          description: ID del ETL de tipo Alerta que reporta.
+          example: 3
+        fechaReporte:
+          type: string
+          format: date-time
+          description: Fecha y hora de finalización o generación del reporte general (puede ser igual a horaFin).
+          example: "2025-05-24T10:15:00Z"
+        statusGeneral:
+          type: string
+          description: Estado general de la ejecución del ETL.
+          example: "ExitosoConAlertaLeve"
+        detalleAlerta:
+          $ref: '#/components/schemas/DetalleAlertaData'
+      required:
+        - idEtl
+        - fechaReporte
+        - statusGeneral
+        - detalleAlerta
+
+    RegistroReporteAlertaResponse:
+      type: object
+      properties:
+        mensaje:
+          type: string
+          example: "Reporte de alerta/ejecución registrado exitosamente."
+        idReporte:
+          type: integer
+          example: 103
+        idDetalleAlerta:
+          type: integer
+          example: 203
+
 security: # Seguridad global por defecto para los endpoints
   - bearerAuth: []
 
@@ -576,6 +767,125 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Prohibido (el rol del usuario no tiene permisos).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /reportes/procesamiento:
+    post:
+      tags:
+        - Reportes
+      summary: Registra un reporte de ejecución de un ETL de tipo Procesamiento.
+      description: Usado por procesos ETL automatizados para registrar el resultado de su ejecución. No requiere autenticación de usuario.
+      security: [] # Anula la seguridad global, este endpoint es para sistemas.
+      requestBody:
+        description: Datos del reporte de procesamiento.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarReporteProcesamientoRequest'
+      responses:
+        '201':
+          description: Reporte de procesamiento registrado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistroReporteProcesamientoResponse'
+        '400':
+          description: Datos de entrada inválidos o faltantes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: ETL con el idEtl especificado no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /reportes/archivo:
+    post:
+      tags:
+        - Reportes
+      summary: Registra un reporte de ejecución de un ETL de tipo Archivo.
+      description: Usado por procesos ETL automatizados para registrar el resultado de su ejecución. No requiere autenticación de usuario.
+      security: [] # Anula la seguridad global.
+      requestBody:
+        description: Datos del reporte de archivo.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarReporteArchivoRequest'
+      responses:
+        '201':
+          description: Reporte de archivo registrado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistroReporteArchivoResponse'
+        '400':
+          description: Datos de entrada inválidos o faltantes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: ETL con el idEtl especificado no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /reportes/alerta:
+    post:
+      tags:
+        - Reportes
+      summary: Registra un reporte de ejecución de un ETL de tipo Alerta.
+      description: Usado por procesos ETL automatizados para registrar el resultado de su ejecución o una alerta específica. No requiere autenticación de usuario.
+      security: [] # Anula la seguridad global.
+      requestBody:
+        description: Datos del reporte de alerta/ejecución.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarReporteAlertaRequest'
+      responses:
+        '201':
+          description: Reporte de alerta/ejecución registrado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistroReporteAlertaResponse'
+        '400':
+          description: Datos de entrada inválidos o faltantes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: ETL con el idEtl especificado no encontrado.
           content:
             application/json:
               schema:
