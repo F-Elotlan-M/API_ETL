@@ -35,4 +35,16 @@ router.post(
   reporteController.registrarReporteAlerta
 );
 
+router.get(
+  '/criticos-no-acusados',
+  [authenticateToken, hasRequiredRole(['Administrador', 'Consultor'])],
+  reporteController.obtenerReportesCriticosNoAcusados
+);
+
+router.post(
+  '/:idReporte/acusar', // :idReporte será un parámetro de ruta
+  [authenticateToken, hasRequiredRole(['Administrador', 'Consultor'])],
+  reporteController.acusarReciboReporteCritico
+);
+
 module.exports = router;

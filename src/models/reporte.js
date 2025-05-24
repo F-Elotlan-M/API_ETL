@@ -23,6 +23,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'idReporte',
         as: 'detalleAlerta'
       });
+      Reporte.hasMany(models.UsuarioReporteAcuse, {
+        foreignKey: 'idReporte',
+        as: 'usuariosQueAcusaron'
+      });
     }
   }
   Reporte.init({

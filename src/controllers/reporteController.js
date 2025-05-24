@@ -1,5 +1,5 @@
 // src/controllers/reporteController.js
-const { Reporte, ETL, Permiso, Usuario, ETLProcesamiento, ETLArchivo, ETLAlerta, sequelize } = require('../models');
+const { Reporte, ETL, Permiso, Usuario, ETLProcesamiento, ETLArchivo, ETLAlerta, UsuarioReporteAcuse, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 exports.obtenerReportesDelDia = async (req, res) => {
@@ -360,5 +360,118 @@ exports.registrarReporteAlerta = async (req, res) => {
     if (t) await t.rollback();
     console.error("Error al registrar reporte de alerta:", error);
     return res.status(500).json({ mensaje: 'Error interno del servidor al registrar el reporte.' });
+  }
+};
+
+exports.obtenerReportesCriticosNoAcusados = async (req, res) => {
+  const usuarioAutenticado = req.user; // { id, nombre, rol }
+
+  try {
+    // 1. Obtener los IDs de los reportes que este usuario ya ha acusado
+    const acusesExistentes = await UsuarioReporteAcuse.findAll({
+      where: { idUsuario: usuarioAutenticado.id },
+      attributes: ['idReporte']
+    });
+    const idsReportesAcusados = acusesExistentes.map(acuse => acuse.idReporte);
+
+    // 2. Construir la cláusula 'where' base para los reportes críticos
+    const whereClauseReporte = {
+      Status: 'Fallido Crítico', // Condición para fallo crítico
+      id: { [Op.notIn]: idsReportesAcusados } // Excluir los ya acusados
+    };
+
+    // 3. Si el usuario es Consultor, filtrar por ETLs permitidos
+    if (usuarioAutenticado.rol === 'Consultor') {
+      const permisos = await Permiso.findAll({
+        where: { idUsuario: usuarioAutenticado.id },
+        attributes: ['idEtl']
+      });
+
+      if (!permisos || permisos.length === 0) {
+        return res.status(200).json([]); // Consultor sin permisos para ningún ETL
+      }
+      const etlIdsPermitidos = permisos.map(p => p.idEtl);
+      whereClauseReporte.idEtl = { [Op.in]: etlIdsPermitidos };
+    } else if (usuarioAutenticado.rol !== 'Administrador') {
+      return res.status(403).json({ mensaje: 'Rol no autorizado para esta acción.' });
+    }
+    // Los Administradores ven todos los reportes críticos no acusados por ellos.
+
+    // 4. Obtener los reportes críticos no acusados
+    const reportesCriticos = await Reporte.findAll({
+      where: whereClauseReporte,
+      include: [{
+        model: ETL,
+        as: 'etl',
+        attributes: ['id', 'nombre', 'tipo']
+      }],
+      order: [['FechaReporte', 'DESC']], // Mostrar los más recientes primero
+      attributes: ['id', 'FechaReporte', 'Status', 'idEtl']
+    });
+
+    // 5. Formatear la respuesta
+    const respuestaFormateada = reportesCriticos.map(r => ({
+      idReporte: r.id,
+      fechaReporte: r.FechaReporte,
+      statusReporte: r.Status,
+      etl: r.etl ? {
+        idEtl: r.etl.id,
+        nombreEtl: r.etl.nombre,
+        tipoEtl: r.etl.tipo
+      } : null,
+      // Mensaje para la GUI como lo describe el CU
+      mensajeParaDialogo: r.etl ? `Alerta crítica: Se ha detectado un fallo crítico en el ETL ${r.etl.nombre}` : 'Alerta crítica: Fallo crítico detectado.'
+    }));
+
+    return res.status(200).json(respuestaFormateada);
+
+  } catch (error) {
+    console.error("Error al obtener reportes críticos no acusados:", error);
+    return res.status(500).json({ mensaje: 'Error interno del servidor.' });
+  }
+};
+
+exports.acusarReciboReporteCritico = async (req, res) => {
+  const { idReporte } = req.params;
+  const idUsuario = req.user.id; // ID del usuario autenticado
+
+  try {
+    // 1. Verificar que el reporte exista y sea realmente crítico (opcional pero recomendado)
+    const reporte = await Reporte.findOne({
+      where: {
+        id: idReporte,
+        Status: 'Fallido Crítico' // Asegurarse que es un reporte que debería ser acusado
+      }
+    });
+
+    if (!reporte) {
+      return res.status(404).json({ mensaje: `Reporte crítico con ID ${idReporte} no encontrado o ya no es crítico.` });
+    }
+
+    // 2. Intentar crear el acuse de recibo.
+    // findOrCreate para evitar errores si ya existe (ej. por doble clic del usuario)
+    // La restricción unique en la BD también protege contra duplicados.
+    const [acuse, creado] = await UsuarioReporteAcuse.findOrCreate({
+      where: { idUsuario: idUsuario, idReporte: parseInt(idReporte) },
+      defaults: {
+        idUsuario: idUsuario,
+        idReporte: parseInt(idReporte),
+        fechaAcuse: new Date()
+      }
+    });
+
+    if (creado) {
+      return res.status(201).json({ mensaje: `Acuse de recibo para el reporte ID ${idReporte} registrado exitosamente.` });
+    } else {
+      return res.status(200).json({ mensaje: `Ya habías acusado recibo para el reporte ID ${idReporte}.` });
+    }
+
+  } catch (error) {
+    // Podría haber un error si el idReporte no es un entero válido, etc.
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+         return res.status(404).json({ mensaje: `El reporte con ID ${idReporte} o el usuario no existen.` });
+    }
+    console.error(`Error al acusar recibo del reporte ID ${idReporte}:`, error);
+    return res.status(500).json({ mensaje: 'Error interno del servidor al registrar el acuse de recibo.' });
   }
 };
