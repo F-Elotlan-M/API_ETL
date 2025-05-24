@@ -9,6 +9,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'idUsuario',
         as: 'permisos' // Alias opcional
       });
+      Usuario.hasMany(models.UsuarioReporteAcuse, {
+        foreignKey: 'idUsuario',
+        as: 'acusesDeReporte'
+      });
     }
   }
   Usuario.init({
@@ -21,7 +25,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     rol: {
       type: DataTypes.STRING,
-      allowNull: true, 
+      allowNull: true,
       defaultValue: 'consultor'
     }
   }, {

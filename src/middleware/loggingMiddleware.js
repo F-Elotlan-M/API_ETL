@@ -2,6 +2,10 @@
 const { Log } = require('../models');
 
 const loggingMiddleware = async (req, res, next) => {
+  if (req.originalUrl.startsWith('/api-docs')) {
+    return next(); // Si es una ruta de Swagger UI, no la logueamos y pasamos al siguiente middleware.
+  }
+
   const startTime = process.hrtime(); // Tiempo de inicio de alta precisión
   const fechaInicio = new Date();
 
