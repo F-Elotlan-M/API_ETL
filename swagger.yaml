@@ -1,0 +1,534 @@
+# mi_api_etl/swagger.yaml
+
+openapi: 3.0.0
+info:
+  title: API de Gestión de ETLs y Permisos (Manual)
+  version: "1.0.0" # La versión de tu API
+  description: |
+    Documentación interactiva para la API de gestión de ETLs, usuarios, permisos y reportes.
+    Especificación mantenida manualmente.
+  contact:
+    name: Equipo de Desarrollo API ETLs
+    # email: tu_email@example.com
+
+servers:
+  - url: http://localhost:3000/api # Ajusta el puerto si es diferente
+    description: Servidor de Desarrollo Local
+
+tags:
+  - name: Health
+    description: Chequeos de salud del API
+  - name: Usuarios
+    description: Gestión de usuarios y sus permisos de acceso a ETLs
+  - name: ETLs
+    description: Gestión de los procesos ETL (Crear, Listar, Editar, Eliminar)
+  - name: Reportes
+    description: Consulta de reportes de ejecución de ETLs
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'Token JWT necesario. Formato: Bearer {token}'
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        mensaje:
+          type: string
+          description: Mensaje descriptivo del error.
+          example: Recurso no encontrado.
+      required:
+        - mensaje
+
+    MensajeExito:
+      type: object
+      properties:
+        mensaje:
+          type: string
+          example: Operación realizada exitosamente.
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          example: 'ok'
+        message:
+          type: string
+          example: 'API is healthy and running!'
+        timestamp:
+          type: string
+          format: date-time
+
+    Usuario:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        nombre: { type: string, example: 'juan_perez' }
+        rol: { type: string, example: 'Consultor', nullable: true }
+        createdAt: { type: string, format: 'date-time' }
+        updatedAt: { type: string, format: 'date-time' }
+
+    ETL:
+      type: object
+      properties:
+        id: { type: integer, example: 10 }
+        nombre: { type: string, example: 'ETL Procesamiento Ventas Diarias' }
+        tipo: { type: string, example: 'Diario', nullable: true }
+        descripcion: { type: string, example: 'Procesa las ventas consolidadas.', nullable: true }
+        createdAt: { type: string, format: 'date-time' }
+        updatedAt: { type: string, format: 'date-time' }
+
+    ETLConMensaje:
+      allOf:
+        - $ref: '#/components/schemas/ETL'
+        - type: object
+          properties:
+            mensaje: { type: string, example: 'ETL creado exitosamente.' }
+
+    ReporteDelDia:
+      type: object
+      properties:
+        idReporte: { type: integer, example: 201 }
+        fechaReporte: { type: string, format: 'date-time', example: '2025-05-24T09:00:00.000Z' } # Usa fecha actual
+        statusReporte: { type: string, example: 'Exitoso' }
+        etl:
+          type: object
+          properties:
+            idEtl: { type: integer, example: 1 }
+            nombreEtl: { type: string, example: 'ETL de Ventas' }
+            tipoEtl: { type: string, example: 'Diario', nullable: true }
+
+    PermisoDetalle:
+      type: object
+      properties:
+        idPermiso: { type: integer, example: 1 }
+        idEtl: { type: integer, example: 10 }
+        nombreEtl: { type: string, example: 'ETL Ventas' }
+        descripcionEtl: { type: string, nullable: true, example: 'Procesa ventas.' }
+        tipoEtl: { type: string, nullable: true, example: 'Diario' }
+
+    PermisosDelUsuarioResponse:
+      type: object
+      properties:
+        idUsuario: { type: integer, example: 1 }
+        nombreUsuario: { type: string, example: 'nombre_usuario' }
+        permisos:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermisoDetalle'
+
+    CrearUsuarioRequest:
+      type: object
+      properties:
+        nombreUsuario: { type: string, example: 'nuevo_usuario_01' }
+        etlIds: { type: 'array', items: { type: 'integer' }, example: [1, 2] }
+      required:
+        - nombreUsuario
+        - etlIds
+
+    ActualizarPermisosRequest:
+      type: object
+      properties:
+        etlIds: { type: 'array', items: { type: 'integer' }, example: [1, 3, 5] }
+      required:
+        - etlIds
+
+    CrearETLRequest:
+      type: object
+      properties:
+        nombre: { type: string, example: 'ETL Facturación Mensual' }
+        tipo: { type: string, example: 'Mensual', nullable: true }
+        descripcion: { type: string, example: 'Genera reportes...', nullable: true }
+      required:
+        - nombre
+
+    ActualizarETLRequest:
+      type: object
+      properties:
+        nombre: { type: string, example: 'ETL Facturación (Actualizado)', nullable: true }
+        tipo: { type: string, example: 'Batch Mensual', nullable: true }
+        descripcion: { type: string, example: 'Descripción actualizada.', nullable: true }
+
+security: # Seguridad global por defecto para los endpoints
+  - bearerAuth: []
+
+paths:
+  /health-check:
+    get:
+      tags:
+        - Health
+      summary: Verifica el estado de la API.
+      description: Responde si la API está funcionando. No requiere autenticación.
+      security: [] # Anula la seguridad global para ESTE endpoint, haciéndolo público
+      responses:
+        '200':
+          description: Respuesta exitosa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /etls: # Ruta base para los ETLs
+    get:
+      tags:
+        - ETLs
+      summary: Lista todos los ETLs
+      description: Obtiene una lista de todos los ETLs disponibles en el sistema.
+      security: # Este endpoint y los siguientes requieren autenticación
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Una lista de ETLs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ETL'
+        '401':
+          description: No autorizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Prohibido (rol no permitido).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        # Puedes añadir más respuestas de error si aplican (ej. 500)
+
+    post:
+      tags:
+        - ETLs
+      summary: Crea un nuevo ETL
+      description: Registra un nuevo ETL en el sistema.
+      security:
+        - bearerAuth: []
+      requestBody:
+        description: Datos del ETL a crear.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearETLRequest'
+      responses:
+        '201':
+          description: ETL creado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ETLConMensaje'
+        '400':
+          description: Datos de entrada inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: No autorizado.
+        '403':
+          description: Prohibido.
+        # '409': Conflicto si el nombre ya existe (opcional)
+
+  /etls/{idEtl}: # Ruta para un ETL específico
+    get:
+      tags:
+        - ETLs
+      summary: Obtiene un ETL por ID
+      description: Recupera los detalles de un ETL específico usando su ID.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: idEtl
+          in: path # Parámetro de ruta
+          required: true
+          description: ID numérico del ETL a obtener.
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Detalles del ETL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ETL'
+        '404':
+          description: ETL no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        # Añade respuestas 401, 403
+
+    put:
+      tags:
+        - ETLs
+      summary: Actualiza un ETL existente
+      description: Modifica los detalles de un ETL existente.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: idEtl
+          in: path
+          required: true
+          description: ID numérico del ETL a actualizar.
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        description: Campos del ETL a actualizar.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizarETLRequest'
+      responses:
+        '200':
+          description: ETL actualizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ETLConMensaje'
+        '400':
+          description: Datos de entrada inválidos.
+        '404':
+          description: ETL no encontrado.
+        # Añade respuestas 401, 403, 409
+
+    delete:
+      tags:
+        - ETLs
+      summary: Elimina un ETL
+      description: Elimina permanentemente un ETL del sistema.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: idEtl
+          in: path
+          required: true
+          description: ID numérico del ETL a eliminar.
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200': # O '204' No Content, si prefieres no devolver cuerpo
+          description: ETL eliminado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeExito'
+        '404':
+          description: ETL no encontrado.
+        # Añade respuestas 401, 403
+  /usuarios: # Ruta base para los Usuarios
+    get:
+      tags:
+        - Usuarios
+      summary: Lista todos los usuarios
+      description: Obtiene una lista de todos los usuarios registrados en el sistema. Requiere rol de Administrador.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Una lista de usuarios.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Usuario'
+        '401':
+          description: No autorizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Prohibido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Usuarios
+      summary: Agrega un nuevo usuario (CU-01)
+      description: Registra un nuevo usuario en el sistema y le asigna permisos iniciales para consultar ETLs. Requiere rol de Administrador.
+      security:
+        - bearerAuth: []
+      requestBody:
+        description: Datos del usuario a crear y los IDs de los ETLs a los que tendrá acceso.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearUsuarioRequest'
+      responses:
+        '201': # Usuario creado
+          description: Usuario creado y permisos asignados correctamente. Devuelve los datos del usuario y los IDs de ETL asignados.
+          content:
+            application/json:
+              schema: # Definimos un esquema específico para esta respuesta
+                type: object
+                properties:
+                  idUsuario: { type: integer, example: 3 }
+                  nombreUsuario: { type: string, example: 'nuevo_usuario_01' }
+                  # rol: { type: string, example: 'Consultor' } # Si CU-01 asigna un rol por defecto
+                  etlIdsAsignados: { type: 'array', items: { type: 'integer' }, example: [1, 2] }
+                  mensaje: { type: string, example: 'Usuario creado y permisos asignados correctamente.' }
+        '400':
+          description: Datos de entrada inválidos (ej. nombreUsuario faltante, etlIds no es un array, o algún etlId no existe).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: No autorizado.
+        '403':
+          description: Prohibido.
+        '409':
+          description: Conflicto (ej. el nombre de usuario ya existe).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor.
+
+  /usuarios/{idUsuario}/permisos: # Ruta para gestionar permisos de un usuario específico
+    get:
+      tags:
+        - Usuarios # O podrías tener un tag "Permisos"
+      summary: Obtiene los permisos de un usuario específico (CU-02)
+      description: Lista los ETLs a los que un usuario específico tiene permiso de acceso. Requiere rol de Administrador.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: idUsuario
+          in: path
+          required: true
+          description: ID numérico del usuario cuyos permisos se quieren obtener.
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Lista de permisos del usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermisosDelUsuarioResponse'
+        '401':
+          description: No autorizado.
+        '403':
+          description: Prohibido.
+        '404':
+          description: Usuario no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor.
+
+    put:
+      tags:
+        - Usuarios # O tag "Permisos"
+      summary: Actualiza los permisos de un usuario específico (CU-02)
+      description: Reemplaza la lista de ETLs a los que un usuario tiene acceso. Enviar un array vacío en etlIds quita todos los permisos. Requiere rol de Administrador.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: idUsuario
+          in: path
+          required: true
+          description: ID numérico del usuario cuyos permisos se van a actualizar.
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        description: Lista completa de IDs de ETL a los que el usuario tendrá permiso.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizarPermisosRequest'
+      responses:
+        '200':
+          description: Permisos actualizados correctamente.
+          content:
+            application/json:
+              schema: # Respuesta similar a la creación de usuario o una específica para esto
+                type: object
+                properties:
+                  idUsuario: { type: integer, example: 1 }
+                  etlIdsAsignados: { type: 'array', items: { type: 'integer' }, example: [1, 3, 5] }
+                  mensaje: { type: string, example: 'Permisos actualizados correctamente.' }
+        '400':
+          description: Datos de entrada inválidos (ej. etlIds no es un array, o algún etlId no existe).
+        '401':
+          description: No autorizado.
+        '403':
+          description: Prohibido.
+        '404':
+          description: Usuario no encontrado.
+        '500':
+          description: Error interno del servidor.
+  /reportes/hoy:
+    get:
+      tags:
+        - Reportes
+      summary: Consulta reportes del día actual (CU-06)
+      description: |
+        Obtiene todos los registros de la tabla Reporte cuya fechaReporte corresponda al día actual.
+        - Administradores: Ven todos los reportes del día de todos los ETLs.
+        - Consultores: Ven todos los reportes del día, pero solo de los ETLs a los que tienen permiso.
+      security:
+        - bearerAuth: [] # Requiere token de Administrador o Consultor
+      responses:
+        '200':
+          description: Una lista de reportes del día actual.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReporteDelDia'
+        '401':
+          description: No autorizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Prohibido (rol no permitido o consultor sin permisos).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
