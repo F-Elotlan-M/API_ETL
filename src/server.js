@@ -6,9 +6,12 @@ require('dotenv').config();
 const express = require('express');
 const { sequelize } = require('./models');
 
-const loggingMiddleware = require('./middleware/loggingMiddleware');
+const swaggerUi = require('swagger-ui-express');
+const fs = require('node:fs'); // Módulo fs de Node para leer archivos
+const path = require('node:path'); // Módulo path de Node para construir rutas de archivo
+const yaml = require('js-yaml'); // Para parsear el archivo YAML
 
-// Importar las rutas
+const loggingMiddleware = require('./middleware/loggingMiddleware');
 const usuarioRoutes = require('./routes/usuarioRoutes'); // <--- AÑADE ESTA LÍNEA
 const etlRoutes = require('./routes/etlRoutes'); // <--- AÑADE ESTA LÍNEA
 const reporteRoutes = require('./routes/reporteRoutes');
@@ -19,6 +22,30 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(loggingMiddleware);
+
+try {
+  // Construye la ruta al archivo swagger.yaml (asumiendo que está en la raíz del proyecto)
+  const swaggerDocumentPath = path.join(__dirname, '../swagger.yaml'); 
+  const swaggerDocumentFile = fs.readFileSync(swaggerDocumentPath, 'utf8');
+  const swaggerSpecManual = yaml.load(swaggerDocumentFile);
+
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecManual));
+  console.log(`[Swagger] Documentación (manual desde YAML) disponible en http://localhost:${PORT}/api-docs`);
+} catch (e) {
+  console.error('[Swagger] Error crítico al cargar o parsear swagger.yaml:', e.message);
+  const errorSpec = {openapi: '3.0.0', info: {title: 'Error al Cargar Documentación Swagger', version: '0'}, paths: {}};
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(errorSpec));
+}
+// ----------------------------------------------------------
+
+// Ruta de prueba para /api/health-check (para que coincida con swagger.yaml)
+app.get('/api/health-check', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'API is healthy and running!',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Montar las rutas de la API
 app.use('/api/usuarios', usuarioRoutes); // <--- AÑADE ESTA LÍNEA: Todas las rutas en usuarioRoutes estarán prefijadas con /api/usuarios
