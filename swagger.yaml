@@ -532,3 +532,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /reportes/por-fecha: # Nueva definición para CU-07
+    get:
+      tags:
+        - Reportes
+      summary: Consulta reportes por fecha específica (CU-07)
+      description: |
+        Obtiene todos los registros de la tabla Reporte cuya fechaReporte corresponda a la fecha especificada en el parámetro de consulta.
+        - El formato de fecha es YYYY-MM-DD.
+        - Administradores: Ven todos los reportes de la fecha especificada.
+        - Consultores: Ven los reportes de la fecha especificada, pero solo de los ETLs a los que tienen permiso.
+      security:
+        - bearerAuth: [] # Requiere token de Administrador o Consultor
+      parameters:
+        - name: fecha # Nombre del parámetro de consulta
+          in: query # Indica que es un query parameter (ej. /por-fecha?fecha=YYYY-MM-DD)
+          required: true
+          description: "Fecha para la cual se consultarán los reportes, en formato YYYY-MM-DD."
+          schema:
+            type: string
+            format: date # Esto ayuda a Swagger UI a mostrar un selector de fecha
+            example: "2025-05-20" 
+      responses:
+        '200':
+          description: Una lista de reportes para la fecha especificada. El array estará vacío si no se encuentran reportes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReporteDelDia' # Usamos el mismo schema que para /reportes/hoy
+        '400':
+          description: Error en la solicitud (ej. parámetro 'fecha' faltante o en formato incorrecto).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: No autorizado (token no válido o no provisto).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Prohibido (el rol del usuario no tiene permisos).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

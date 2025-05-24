@@ -11,4 +11,10 @@ router.get(
   reporteController.obtenerReportesDelDia
 );
 
+router.get(
+  '/por-fecha',
+  [authenticateToken, hasRequiredRole(['Administrador', 'Consultor'])],
+  reporteController.obtenerReportesPorFecha
+);
+
 module.exports = router;
