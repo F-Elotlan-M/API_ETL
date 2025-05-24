@@ -48,7 +48,24 @@ const isAdmin = (req, res, next) => {
   }
 };
 
+const hasRequiredRole = (allowedRoles) => { // Un array de strings de roles permitidos
+  return (req, res, next) => {
+    // Se asume que authenticateToken ya se ejecutó y req.user (con req.user.rol) está disponible
+    if (!req.user || !req.user.rol) {
+      // Esto no debería pasar si authenticateToken es obligatorio antes, pero es una buena guarda
+      return res.status(403).json({ mensaje: 'Acceso denegado: Información de rol no disponible en el token.' });
+    }
+
+    if (allowedRoles.includes(req.user.rol)) {
+      next(); // El rol del usuario está en la lista de roles permitidos, continuar
+    } else {
+      return res.status(403).json({ mensaje: `Acceso denegado: Su rol ('${req.user.rol}') no tiene permiso. Requiere uno de los siguientes roles: ${allowedRoles.join(', ')}.` });
+    }
+  };
+};
+
 module.exports = {
   authenticateToken,
-  isAdmin
+  isAdmin,
+  hasRequiredRole
 };
