@@ -1,5 +1,5 @@
 // src/controllers/reporteController.js
-const { Reporte, ETL, Permiso, Usuario, ETLProcesamiento, sequelize } = require('../models');
+const { Reporte, ETL, Permiso, Usuario, ETLProcesamiento, ETLArchivo, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 exports.obtenerReportesDelDia = async (req, res) => {
@@ -227,6 +227,67 @@ exports.registrarReporteProcesamiento = async (req, res) => {
   } catch (error) {
     if (t) await t.rollback(); // Revertir transacción si hubo error
     console.error("Error al registrar reporte de procesamiento:", error);
+    return res.status(500).json({ mensaje: 'Error interno del servidor al registrar el reporte.' });
+  }
+};
+
+exports.registrarReporteArchivo = async (req, res) => {
+  const { idEtl, fechaReporte, statusGeneral, detalleArchivo } = req.body;
+
+  // 1. Validaciones de entrada
+  if (!idEtl || !fechaReporte || !statusGeneral || !detalleArchivo) {
+    return res.status(400).json({ mensaje: 'Faltan campos requeridos: idEtl, fechaReporte, statusGeneral, o detalleArchivo.' });
+  }
+  if (typeof idEtl !== 'number' || !Number.isInteger(idEtl)) {
+    return res.status(400).json({ mensaje: 'idEtl debe ser un número entero.' });
+  }
+  if (isNaN(new Date(fechaReporte).getTime())) {
+    return res.status(400).json({ mensaje: 'fechaReporte no es una fecha válida.' });
+  }
+  if (typeof detalleArchivo !== 'object' || detalleArchivo === null) {
+    return res.status(400).json({ mensaje: 'detalleArchivo debe ser un objeto.'});
+  }
+  const { status } = detalleArchivo; // Mensaje es opcional en ETLArchivo
+  if (!status) {
+    return res.status(400).json({ mensaje: 'Campo requerido en detalleArchivo: status.' });
+  }
+
+  const t = await sequelize.transaction();
+
+  try {
+    // 2. Verificar que el ETL exista
+    const etlExistente = await ETL.findByPk(idEtl, { transaction: t });
+    if (!etlExistente) {
+      await t.rollback();
+      return res.status(404).json({ mensaje: `ETL con ID ${idEtl} no encontrado.` });
+    }
+
+    // 3. Crear el registro en la tabla Reporte
+    const nuevoReporte = await Reporte.create({
+      idEtl,
+      FechaReporte: new Date(fechaReporte),
+      Status: statusGeneral
+    }, { transaction: t });
+
+    // 4. Crear el registro en la tabla ETLArchivo
+    const nuevoDetalle = await ETLArchivo.create({
+      idReporte: nuevoReporte.id,
+      status: detalleArchivo.status, // Mapea a 'Status' en BD por el 'field' en el modelo
+      mensaje: detalleArchivo.mensaje || null // Mapea a 'Mensaje'
+    }, { transaction: t });
+
+    // 5. Confirmar la transacción
+    await t.commit();
+
+    return res.status(201).json({
+      mensaje: 'Reporte de archivo registrado exitosamente.',
+      idReporte: nuevoReporte.id,
+      idDetalleArchivo: nuevoDetalle.id
+    });
+
+  } catch (error) {
+    if (t) await t.rollback();
+    console.error("Error al registrar reporte de archivo:", error);
     return res.status(500).json({ mensaje: 'Error interno del servidor al registrar el reporte.' });
   }
 };

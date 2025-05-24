@@ -23,4 +23,10 @@ router.post(
   reporteController.registrarReporteProcesamiento
 );
 
+router.post(
+  '/archivo',
+  // SIN MIDDLEWARES DE AUTENTICACIÓN DE USUARIO
+  reporteController.registrarReporteArchivo
+);
+
 module.exports = router;
