@@ -1,5 +1,5 @@
 // src/controllers/reporteController.js
-const { Reporte, ETL, Permiso, Usuario } = require('../models');
+const { Reporte, ETL, Permiso, Usuario, ETLProcesamiento, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 exports.obtenerReportesDelDia = async (req, res) => {
@@ -160,5 +160,73 @@ exports.obtenerReportesPorFecha = async (req, res) => {
   } catch (error) {
     console.error(`Error al obtener los reportes para la fecha ${fecha}:`, error);
     return res.status(500).json({ mensaje: 'Error interno del servidor al obtener los reportes.' });
+  }
+};
+
+exports.registrarReporteProcesamiento = async (req, res) => {
+  const { idEtl, fechaReporte, statusGeneral, detalleProcesamiento } = req.body;
+
+  // 1. Validaciones de entrada básicas
+  if (!idEtl || !fechaReporte || !statusGeneral || !detalleProcesamiento) {
+    return res.status(400).json({ mensaje: 'Faltan campos requeridos: idEtl, fechaReporte, statusGeneral, o detalleProcesamiento.' });
+  }
+  if (typeof idEtl !== 'number' || !Number.isInteger(idEtl)) {
+    return res.status(400).json({ mensaje: 'idEtl debe ser un número entero.' });
+  }
+  if (isNaN(new Date(fechaReporte).getTime())) {
+    return res.status(400).json({ mensaje: 'fechaReporte no es una fecha válida.' });
+  }
+  if (typeof detalleProcesamiento !== 'object' || detalleProcesamiento === null) {
+    return res.status(400).json({ mensaje: 'detalleProcesamiento debe ser un objeto.'});
+  }
+  // Validaciones para campos dentro de detalleProcesamiento
+  const { nombre, fecha, status } = detalleProcesamiento; // NombreArchivo y Mensaje son opcionales
+  if (!nombre || !fecha || !status) {
+    return res.status(400).json({ mensaje: 'Campos requeridos en detalleProcesamiento: nombre, fecha, status.' });
+  }
+  if (isNaN(new Date(fecha).getTime())) {
+    return res.status(400).json({ mensaje: 'detalleProcesamiento.fecha no es una fecha válida.' });
+  }
+
+  const t = await sequelize.transaction(); // Iniciar transacción
+
+  try {
+    // 2. Verificar que el ETL exista
+    const etlExistente = await ETL.findByPk(idEtl, { transaction: t });
+    if (!etlExistente) {
+      await t.rollback();
+      return res.status(404).json({ mensaje: `ETL con ID ${idEtl} no encontrado.` });
+    }
+
+    // 3. Crear el registro en la tabla Reporte
+    const nuevoReporte = await Reporte.create({
+      idEtl,
+      FechaReporte: new Date(fechaReporte),
+      Status: statusGeneral
+    }, { transaction: t });
+
+    // 4. Crear el registro en la tabla ETLProcesamiento
+    const nuevoDetalle = await ETLProcesamiento.create({
+      idReporte: nuevoReporte.id,
+      nombre: detalleProcesamiento.nombre,
+      fecha: new Date(detalleProcesamiento.fecha),
+      nombreArchivo: detalleProcesamiento.nombreArchivo || null,
+      status: detalleProcesamiento.status,
+      mensaje: detalleProcesamiento.mensaje || null
+    }, { transaction: t });
+
+    // 5. Confirmar la transacción
+    await t.commit();
+
+    return res.status(201).json({
+      mensaje: 'Reporte de procesamiento registrado exitosamente.',
+      idReporte: nuevoReporte.id,
+      idDetalleProcesamiento: nuevoDetalle.id
+    });
+
+  } catch (error) {
+    if (t) await t.rollback(); // Revertir transacción si hubo error
+    console.error("Error al registrar reporte de procesamiento:", error);
+    return res.status(500).json({ mensaje: 'Error interno del servidor al registrar el reporte.' });
   }
 };

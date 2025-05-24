@@ -11,6 +11,10 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: 'SET NULL', // Coincide con la migración
         onUpdate: 'CASCADE'
       });
+      Reporte.hasOne(models.ETLProcesamiento, { // Un Reporte tiene un detalle de procesamiento
+        foreignKey: 'idReporte',
+        as: 'detalleProcesamiento'
+      });
     }
   }
   Reporte.init({
