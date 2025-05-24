@@ -15,6 +15,7 @@ const loggingMiddleware = require('./middleware/loggingMiddleware');
 const usuarioRoutes = require('./routes/usuarioRoutes'); // <--- AÑADE ESTA LÍNEA
 const etlRoutes = require('./routes/etlRoutes'); // <--- AÑADE ESTA LÍNEA
 const reporteRoutes = require('./routes/reporteRoutes');
+const authRoutes = require('./routes/authRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,6 +52,7 @@ app.get('/api/health-check', (req, res) => {
 app.use('/api/usuarios', usuarioRoutes); // <--- AÑADE ESTA LÍNEA: Todas las rutas en usuarioRoutes estarán prefijadas con /api/usuarios
 app.use('/api/etls', etlRoutes);
 app.use('/api/reportes', reporteRoutes);
+app.use('/api/auth', authRoutes);
 
 app.get('/', (req, res) => {
   res.send('¡API de ETLs funcionando correctamente!');

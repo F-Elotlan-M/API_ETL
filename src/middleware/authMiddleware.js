@@ -1,69 +1,80 @@
 // src/middleware/authMiddleware.js
-
 const jwt = require('jsonwebtoken');
+const { decryptText } = require('../utils/encryptionUtils'); // Asegúrate que la ruta sea correcta
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// Verificar que JWT_SECRET esté definido
+// Verificar que JWT_SECRET esté definido al inicio del módulo
 if (!JWT_SECRET) {
   console.error("FATAL ERROR: JWT_SECRET no está definido en las variables de entorno.");
-  process.exit(1); // Termina la aplicación si el secreto no está configurado
+  process.exit(1);
 }
 
+// Definimos authenticateToken como una constante
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization']; // Espera "Bearer TOKEN_AQUI"
-  const token = authHeader && authHeader.split(' ')[1];
+  const authHeader = req.headers['authorization'];
+  const tokenEnHeader = authHeader && authHeader.split(' ')[1];
 
-  if (!token) {
+  if (!tokenEnHeader) {
     return res.status(401).json({ mensaje: 'Acceso denegado. Token no proporcionado.' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, userPayload) => {
+  let tokenJWT;
+  try {
+    tokenJWT = decryptText(tokenEnHeader); // Desencriptamos el token
+    if (!tokenJWT) {
+      throw new Error('Token encriptado inválido o no pudo ser desencriptado.');
+    }
+  } catch (decryptionError) {
+    console.error('Error al desencriptar token:', decryptionError.message);
+    return res.status(403).json({ mensaje: 'Acceso denegado. Token con formato incorrecto o corrupto.' });
+  }
+
+  jwt.verify(tokenJWT, JWT_SECRET, (err, userPayload) => {
     if (err) {
       if (err.name === 'TokenExpiredError') {
         return res.status(403).json({ mensaje: 'Acceso denegado. Token expirado.' });
       }
-      console.error('Error al verificar token:', err.message);
-      return res.status(403).json({ mensaje: 'Acceso denegado. Token inválido.' });
+      console.error('Error al verificar el token JWT (después de desencriptar):', err.message);
+      return res.status(403).json({ mensaje: 'Acceso denegado. Token inválido o expirado.' });
     }
-
-    // El payload del token decodificado se adjunta al objeto request
-    // Asumimos que el payload contiene al menos 'id' y 'rol' del usuario
-    // ej: { id: 1, nombre: 'Admin User', rol: 'Administrador', iat: ..., exp: ... }
-    req.user = userPayload;
-    next(); // Pasa al siguiente middleware o al controlador de la ruta
+    req.user = userPayload; // Adjuntamos el payload del usuario a la solicitud
+    next();
   });
 };
 
+// Definimos isAdmin como una constante
 const isAdmin = (req, res, next) => {
-  // Este middleware debe ejecutarse DESPUÉS de authenticateToken
+  // Este middleware asume que authenticateToken se ejecutó antes y req.user está disponible
   if (req.user && req.user.rol === 'Administrador') {
-    next(); // El usuario es Administrador, continuar
+    next();
   } else {
-    // Si req.user no existe o el rol no es 'Administrador'
     let mensaje = 'Acceso denegado. Permisos insuficientes.';
-    if (req.user) {
+    if (req.user && req.user.rol) { // Verificar si req.user.rol existe
       mensaje = `Acceso denegado. Rol '${req.user.rol}' no tiene permisos de Administrador.`;
+    } else if (req.user) {
+      mensaje = `Acceso denegado. Rol no definido para el usuario. Se requieren permisos de Administrador.`;
     }
     return res.status(403).json({ mensaje });
   }
 };
 
-const hasRequiredRole = (allowedRoles) => { // Un array de strings de roles permitidos
+// Definimos hasRequiredRole como una constante
+const hasRequiredRole = (allowedRoles) => { // allowedRoles es un array de strings
   return (req, res, next) => {
-    // Se asume que authenticateToken ya se ejecutó y req.user (con req.user.rol) está disponible
+    // Este middleware asume que authenticateToken se ejecutó antes y req.user está disponible
     if (!req.user || !req.user.rol) {
-      // Esto no debería pasar si authenticateToken es obligatorio antes, pero es una buena guarda
       return res.status(403).json({ mensaje: 'Acceso denegado: Información de rol no disponible en el token.' });
     }
 
     if (allowedRoles.includes(req.user.rol)) {
-      next(); // El rol del usuario está en la lista de roles permitidos, continuar
+      next(); // El rol del usuario está en la lista de roles permitidos
     } else {
       return res.status(403).json({ mensaje: `Acceso denegado: Su rol ('${req.user.rol}') no tiene permiso. Requiere uno de los siguientes roles: ${allowedRoles.join(', ')}.` });
     }
   };
 };
 
+// Exportamos las funciones
 module.exports = {
   authenticateToken,
   isAdmin,
