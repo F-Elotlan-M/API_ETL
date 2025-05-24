@@ -345,6 +345,33 @@ components:
           type: integer
           example: 203
 
+    LoginRequest:
+      type: object
+      properties:
+        nombreUsuario:
+          type: string
+          description: Nombre de usuario para el inicio de sesión.
+          example: "admin_da"
+      required:
+        - nombreUsuario
+
+    LoginSuccessResponse:
+      type: object
+      properties:
+        mensaje:
+          type: string
+          example: "Autenticación exitosa."
+        token:
+          type: string
+          description: "Token de acceso (JWT encriptado y codificado) para solicitudes subsecuentes."
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." # Este es un ejemplo de JWT, el tuyo será el encriptado
+        usuario:
+          $ref: '#/components/schemas/Usuario' # Reutilizamos el schema de Usuario
+      required:
+        - mensaje
+        - token
+        - usuario
+
 security: # Seguridad global por defecto para los endpoints
   - bearerAuth: []
 
@@ -896,3 +923,56 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /auth/login: # Se resolverá a /api/auth/login por la config del server
+    post:
+      tags:
+        - Autenticación # Usa el tag que definiste para Autenticación
+      summary: Inicia sesión en el sistema.
+      description: |
+        Autentica a un usuario contra el sistema (actualmente con un Directorio Activo simulado) 
+        y devuelve un token JWT (encriptado) si las credenciales y permisos son válidos.
+        No se envía contraseña; la autenticación se basa en la existencia del usuario en el DA 
+        y su registro y rol/permisos en la base de datos local.
+      requestBody:
+        description: Nombre de usuario para el inicio de sesión.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200': # Éxito en la autenticación
+          description: Autenticación exitosa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginSuccessResponse'
+        '400': # Bad Request
+          description: Solicitud incorrecta (ej. nombreUsuario faltante o vacío).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': # Unauthorized
+          description: Credenciales inválidas (ej. usuario no reconocido por el directorio activo simulado).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403': # Forbidden
+          description: |
+            Acceso denegado debido a:
+            - Usuario autenticado por el directorio, pero no registrado o habilitado en esta aplicación.
+            - Usuario es Consultor pero no tiene permisos ETL asignados.
+            - El rol del usuario no permite el acceso al sistema.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500': # Internal Server Error
+          description: Error interno del servidor (ej. error al generar/encriptar token, error de base de datos).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: [] # Indica que este endpoint es público y no requiere el bearerAuth global
