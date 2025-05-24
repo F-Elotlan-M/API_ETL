@@ -7,8 +7,14 @@ module.exports = (sequelize, DataTypes) => {
       // Un ETL puede estar asociado a muchos registros de Permiso
       ETL.hasMany(models.Permiso, {
         foreignKey: 'idEtl',
-        as: 'permisos' // Alias opcional para la asociación
+        as: 'permisos'
       });
+      // ----> AÑADE ESTA NUEVA ASOCIACIÓN <----
+      ETL.hasMany(models.Reporte, {
+        foreignKey: 'idEtl',
+        as: 'reportes' // Usaremos este alias
+      });
+      // ------------------------------------
     }
   }
   ETL.init({
