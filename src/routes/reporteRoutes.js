@@ -29,4 +29,10 @@ router.post(
   reporteController.registrarReporteArchivo
 );
 
+router.post(
+  '/alerta',
+  // SIN MIDDLEWARES DE AUTENTICACIÓN DE USUARIO
+  reporteController.registrarReporteAlerta
+);
+
 module.exports = router;

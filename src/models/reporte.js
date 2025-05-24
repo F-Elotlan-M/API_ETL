@@ -19,6 +19,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'idReporte',
         as: 'detalleArchivo'
       });
+      Reporte.hasOne(models.ETLAlerta, { // Un Reporte (de tipo Alerta) tiene un detalle de alerta/ejecución
+        foreignKey: 'idReporte',
+        as: 'detalleAlerta'
+      });
     }
   }
   Reporte.init({
