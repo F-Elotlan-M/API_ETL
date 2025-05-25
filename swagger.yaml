@@ -51,19 +51,6 @@ components:
           type: string
           example: Operación realizada exitosamente.
 
-    HealthStatus:
-      type: object
-      properties:
-        status:
-          type: string
-          example: 'ok'
-        message:
-          type: string
-          example: 'API is healthy and running!'
-        timestamp:
-          type: string
-          format: date-time
-
     Usuario:
       type: object
       properties:
@@ -405,30 +392,53 @@ components:
           type: string
           example: "Alerta crítica: Se ha detectado un fallo crítico en el ETL Procesamiento X"
 
+    ReporteConDetalleCompleto:
+      type: object
+      properties:
+        idReporte:
+          type: integer
+          description: ID del registro de reporte.
+          example: 101
+        fechaReporte:
+          type: string
+          format: date-time
+          description: Fecha y hora del reporte.
+        statusReporte:
+          type: string
+          description: Estado general del reporte (ej. Exitoso, Fallido Crítico).
+          example: "Fallido Crítico"
+        etl: # Información del ETL asociado
+          type: object
+          properties:
+            idEtl:
+              type: integer
+              example: 1
+            nombreEtl:
+              type: string
+              example: "ETL Ventas Diarias"
+            tipoEtl:
+              type: string
+              nullable: true
+              example: "Diario"
+        # Solo uno de los siguientes tres campos de detalle estará poblado,
+        # los otros serán null o no estarán presentes.
+        detalleProcesamiento:
+          $ref: '#/components/schemas/DetalleProcesamientoData'
+          nullable: true
+          description: Detalles si el reporte es de tipo Procesamiento.
+        detalleArchivo:
+          $ref: '#/components/schemas/DetalleArchivoData'
+          nullable: true
+          description: Detalles si el reporte es de tipo Archivo.
+        detalleAlerta:
+          $ref: '#/components/schemas/DetalleAlertaData'
+          nullable: true
+          description: Detalles si el reporte es de tipo Alerta.
+
 security: # Seguridad global por defecto para los endpoints
   - bearerAuth: []
 
 paths:
-  /health-check:
-    get:
-      tags:
-        - Health
-      summary: Verifica el estado de la API.
-      description: Responde si la API está funcionando. No requiere autenticación.
-      security: [] # Anula la seguridad global para ESTE endpoint, haciéndolo público
-      responses:
-        '200':
-          description: Respuesta exitosa.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthStatus'
-        '500':
-          description: Error interno del servidor.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
   /etls: # Ruta base para los ETLs
     get:
       tags:
@@ -1096,6 +1106,64 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Reporte crítico no encontrado con el ID proporcionado, o usuario no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /reportes/{idReporte}: # Nueva definición para CU-09 (asumiendo que es /:idReporte y no /:idReporte/detalle)
+    get:
+      tags:
+        - Reportes
+      summary: Obtiene el detalle completo de un reporte específico (CU-09).
+      description: |
+        Recupera la información detallada de un reporte de ejecución de ETL, incluyendo
+        los datos del reporte principal, la información del ETL asociado, y los detalles
+        específicos de su tipo (Procesamiento, Archivo o Alerta).
+        - Administradores: Pueden ver cualquier reporte.
+        - Consultores: Solo pueden ver reportes de ETLs para los cuales tienen permiso.
+      security:
+        - bearerAuth: [] # Requiere token de Administrador o Consultor
+      parameters:
+        - name: idReporte
+          in: path
+          required: true
+          description: ID numérico del Reporte del cual se desea obtener el detalle.
+          schema:
+            type: integer
+            example: 101
+      responses:
+        '200':
+          description: Detalle completo del reporte.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReporteConDetalleCompleto'
+        '400':
+          description: ID de reporte inválido (ej. no es un número).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: No autorizado (token no válido o no provisto).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Prohibido (rol no permitido o consultor sin permiso para el ETL de este reporte).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Reporte con el ID especificado no encontrado.
           content:
             application/json:
               schema:
