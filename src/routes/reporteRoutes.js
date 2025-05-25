@@ -47,4 +47,10 @@ router.post(
   reporteController.acusarReciboReporteCritico
 );
 
+router.get(
+  '/:idReporte', // Usaremos esta ruta más corta y estándar
+  [authenticateToken, hasRequiredRole(['Administrador', 'Consultor'])],
+  reporteController.obtenerDetalleReporte
+);
+
 module.exports = router;

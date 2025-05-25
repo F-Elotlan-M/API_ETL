@@ -475,3 +475,78 @@ exports.acusarReciboReporteCritico = async (req, res) => {
     return res.status(500).json({ mensaje: 'Error interno del servidor al registrar el acuse de recibo.' });
   }
 };
+
+exports.obtenerDetalleReporte = async (req, res) => {
+  const { idReporte } = req.params;
+  const usuarioAutenticado = req.user; // { id, nombre, rol }
+
+  // Validar que idReporte sea un número
+  const reporteIdNumerico = parseInt(idReporte, 10);
+  if (isNaN(reporteIdNumerico)) {
+    return res.status(400).json({ mensaje: 'El ID del reporte debe ser un número válido.' });
+  }
+
+  try {
+    // 1. Buscar el reporte principal e incluir el ETL asociado
+    const reporte = await Reporte.findByPk(reporteIdNumerico, {
+      include: [
+        {
+          model: ETL,
+          as: 'etl', // Alias de la asociación Reporte.belongsTo(ETL)
+          attributes: ['id', 'nombre', 'tipo'] // Campos del ETL que queremos
+        },
+        // Incluimos todos los posibles detalles. Solo uno estará poblado.
+        { model: ETLProcesamiento, as: 'detalleProcesamiento', required: false },
+        { model: ETLArchivo, as: 'detalleArchivo', required: false },
+        { model: ETLAlerta, as: 'detalleAlerta', required: false }
+      ]
+    });
+
+    // 2. Si el reporte no se encuentra
+    if (!reporte) {
+      return res.status(404).json({ mensaje: `Reporte con ID ${reporteIdNumerico} no encontrado.` });
+    }
+
+    // 3. Verificación de Permisos para Consultores
+    if (usuarioAutenticado.rol === 'Consultor') {
+      if (!reporte.etl) { // Esto no debería pasar si la FK idEtl es obligatoria en Reporte (excepto si usamos SET NULL y el ETL fue borrado)
+        return res.status(404).json({ mensaje: 'No se pudo determinar el ETL asociado a este reporte para la verificación de permisos.' });
+      }
+      const permisoConsultor = await Permiso.findOne({
+        where: {
+          idUsuario: usuarioAutenticado.id,
+          idEtl: reporte.idEtl // idEtl directamente del reporte encontrado
+        }
+      });
+      if (!permisoConsultor) {
+        return res.status(403).json({ mensaje: 'Acceso denegado. No tiene permiso para ver detalles de este ETL.' });
+      }
+    } else if (usuarioAutenticado.rol !== 'Administrador') {
+      // Otro rol que no sea Admin o Consultor
+      return res.status(403).json({ mensaje: 'Rol no autorizado para esta acción.' });
+    }
+    // Los Administradores pueden continuar.
+
+    // 4. Formatear la respuesta
+    const respuesta = {
+      idReporte: reporte.id,
+      fechaReporte: reporte.FechaReporte, // Usar PascalCase como en el modelo
+      statusReporte: reporte.Status,     // Usar PascalCase
+      etl: reporte.etl ? { // El objeto etl ya viene con los atributos seleccionados
+        idEtl: reporte.etl.id,
+        nombreEtl: reporte.etl.nombre,
+        tipoEtl: reporte.etl.tipo
+      } : null,
+      // Incluir el detalle que no sea nulo
+      detalleProcesamiento: reporte.detalleProcesamiento || null,
+      detalleArchivo: reporte.detalleArchivo || null,
+      detalleAlerta: reporte.detalleAlerta || null,
+    };
+
+    return res.status(200).json(respuesta);
+
+  } catch (error) {
+    console.error(`Error al obtener el detalle del reporte ID ${idReporte}:`, error);
+    return res.status(500).json({ mensaje: 'Error interno del servidor al obtener el detalle del reporte.' });
+  }
+};
