@@ -372,6 +372,39 @@ components:
         - token
         - usuario
 
+    ReporteCriticoNoAcusado:
+      type: object
+      properties:
+        idReporte:
+          type: integer
+          description: ID del Reporte que tuvo el fallo crítico.
+          example: 150
+        fechaReporte:
+          type: string
+          format: date-time
+          description: Fecha y hora del reporte crítico.
+          example: "2025-05-23T10:00:00.000Z"
+        statusReporte:
+          type: string
+          description: Estado del reporte (debería ser 'Fallido Crítico').
+          example: "Fallido Crítico"
+        etl:
+          type: object
+          properties:
+            idEtl:
+              type: integer
+              example: 5
+            nombreEtl:
+              type: string
+              example: "ETL Procesamiento X"
+            tipoEtl:
+              type: string
+              nullable: true
+              example: "Nocturno"
+        mensajeParaDialogo: # El mensaje que la GUI mostraría
+          type: string
+          example: "Alerta crítica: Se ha detectado un fallo crítico en el ETL Procesamiento X"
+
 security: # Seguridad global por defecto para los endpoints
   - bearerAuth: []
 
@@ -976,3 +1009,100 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       security: [] # Indica que este endpoint es público y no requiere el bearerAuth global
+  /reportes/criticos-no-acusados: # Endpoint para CU-08
+    get:
+      tags:
+        - Reportes
+      summary: Obtiene reportes críticos no acusados por el usuario actual.
+      description: |
+        Devuelve una lista de reportes con estado 'Fallido Crítico' que el usuario autenticado 
+        aún no ha marcado como acusados.
+        - Administradores: Ven todos los reportes críticos no acusados aplicables.
+        - Consultores: Ven solo de los ETLs a los que tienen permiso.
+        Si no hay reportes críticos pendientes para el usuario, devuelve un array vacío.
+      security:
+        - bearerAuth: [] # Requiere token de Administrador o Consultor
+      responses:
+        '200':
+          description: Una lista de reportes críticos no acusados por el usuario.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReporteCriticoNoAcusado'
+        '401':
+          description: No autorizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Prohibido (rol no permitido).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /reportes/{idReporte}/acusar: # Endpoint para CU-08
+    post:
+      tags:
+        - Reportes
+      summary: Marca un reporte crítico como acusado por el usuario actual.
+      description: |
+        Permite al usuario autenticado registrar que ha tomado conocimiento (acusado recibo) 
+        de un reporte crítico específico. Esto evita que la notificación de este reporte 
+        vuelva a aparecerle.
+      security:
+        - bearerAuth: [] # Requiere token de Administrador o Consultor
+      parameters:
+        - name: idReporte
+          in: path
+          required: true
+          description: ID numérico del Reporte crítico que se está acusando.
+          schema:
+            type: integer
+            example: 150
+      responses:
+        '200': # Si el acuse ya existía pero la operación es idempotente
+          description: El usuario ya había acusado recibo de este reporte.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeExito' # Usamos el schema genérico de mensaje
+        '201': # Si el acuse se crea exitosamente
+          description: Acuse de recibo para el reporte registrado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeExito' # Usamos el schema genérico de mensaje
+        '401':
+          description: No autorizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Prohibido (rol no permitido).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Reporte crítico no encontrado con el ID proporcionado, o usuario no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
