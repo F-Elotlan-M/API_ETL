@@ -16,8 +16,6 @@ servers:
     description: Servidor de Desarrollo Local
 
 tags:
-  - name: Health
-    description: Chequeos de salud del API
   - name: Usuarios
     description: Gestión de usuarios y sus permisos de acceso a ETLs
   - name: ETLs
