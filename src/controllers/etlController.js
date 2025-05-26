@@ -1,4 +1,5 @@
 // src/controllers/etlController.js
+const { Op } = require('sequelize');
 const { ETL } = require('../models'); // Solo necesitamos el modelo ETL aquí
 
 exports.listarETLs = async (req, res) => {

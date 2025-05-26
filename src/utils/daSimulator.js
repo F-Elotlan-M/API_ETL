@@ -3,9 +3,9 @@
 // Lista simulada de usuarios que "existen" en el Directorio Activo
 // En un futuro, aquí iría la lógica real de consulta al DA.
 const usuariosValidosEnDA = [
-  'usuario_de_prueba',           // Un administrador que también estará en nuestra BD local
-  'UsuarioPrueba2',   // Un consultor que estará en BD local y tendrá permisos ETL
-  'UsuarioPruebaLog',   // Un consultor que estará en BD local PERO SIN permisos ETL
+  'admin_user',           // Un administrador que también estará en nuestra BD local
+  'consultor_user',   // Un consultor que estará en BD local y tendrá permisos ETL
+  'consultor_dos',   // Un consultor que estará en BD local PERO SIN permisos ETL
   'UsuarioPruebaLog2'  // Un usuario que existe en DA pero NO estará en nuestra BD local
 ];
 
