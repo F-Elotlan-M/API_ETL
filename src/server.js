@@ -1,9 +1,6 @@
-// mi_api_etl/src/server.js
-
-// mi_api_etl/src/server.js
-
 require('dotenv').config();
 const express = require('express');
+const logger = require('./config/logger');
 const { sequelize } = require('./models');
 
 const swaggerUi = require('swagger-ui-express');
@@ -60,8 +57,17 @@ app.get('/', (req, res) => {
 
 // Manejador de errores global (opcional pero recomendado)
 app.use((err, req, res, next) => {
-  console.error("Error no manejado:", err.stack);
-  res.status(500).send('¡Algo salió muy mal en el servidor!');
+  logger.error(`Error no manejado en la ruta: ${req.method} ${req.originalUrl} - ${err.message || 'Error desconocido'}`, { 
+    stack: err.stack, 
+    errorObject: err // Loguea el objeto de error completo si es posible
+  });
+  if (!res.headersSent) {
+    res.status(err.status || 500).json({ 
+      mensaje: err.message || 'Ocurrió un error inesperado en el servidor.' 
+    });
+  } else {
+    next(err); // Si ya se enviaron headers, delega al manejador de errores por defecto de Express
+  }
 });
 
 
@@ -81,3 +87,13 @@ async function startServer() {
 }
 
 startServer();
+
+process.on('uncaughtException', (error) => {
+  logger.error('Excepción GLOBAL no capturada:', { message: error.message, stack: error.stack, errorObject: error });
+  // Considera cerrar de forma ordenada y salir en producción
+  // process.exit(1); 
+});
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Rechazo de Promesa GLOBAL no manejado:', { reason: String(reason), promiseDetails: promise }); // String(reason) para evitar problemas si 'reason' es complejo
+  // process.exit(1); 
+});

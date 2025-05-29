@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/home/elotlan/Documentos/chedraui/API_ETL/logs/.2ced2919a06da3e73ed364302d163eab139d6cf2-audit.json",
+    "files": [
+        {
+            "date": 1748538898642,
+            "name": "/home/elotlan/Documentos/chedraui/API_ETL/logs/app-2025-05-29.log",
+            "hash": "799e7e18db5bd34cf65ff17ba0a001a4d9d5966045621f3728b519d1ebbe2ad7"
+        }
+    ],
+    "hashType": "sha256"
+}
