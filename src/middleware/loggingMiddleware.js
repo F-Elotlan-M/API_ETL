@@ -1,75 +1,102 @@
 // src/middleware/loggingMiddleware.js
-const { Log } = require('../models');
+const { Log } = require('../models');         // Tu modelo Sequelize para la BD
+const logger = require('../config/logger'); // Nuestro nuevo logger Winston
 
 const loggingMiddleware = async (req, res, next) => {
+  // Excluimos las rutas de Swagger UI del logging
   if (req.originalUrl.startsWith('/api-docs')) {
-    return next(); // Si es una ruta de Swagger UI, no la logueamos y pasamos al siguiente middleware.
+    return next();
   }
 
-  const startTime = process.hrtime(); // Tiempo de inicio de alta precisión
+  const startTime = process.hrtime();
   const fechaInicio = new Date();
+  const { method, originalUrl, ip, headers, query } = req; // Capturamos datos de la solicitud
 
-  // Capturar el cuerpo de la respuesta
-  // Guardamos la función original res.send
+  // Lógica para capturar el cuerpo de la respuesta
   const originalSend = res.send;
-  let responseBody; // Variable para almacenar el cuerpo de la respuesta
+  let responseBodyString; // Para almacenar el cuerpo de la respuesta como string
 
-  // Sobrescribimos res.send para capturar su contenido
   res.send = function (body) {
-    // Si el body no es un buffer, lo convertimos a string
-    // (esto es una simplificación, en producción puede necesitar más manejo de tipos)
-    if (body && !(body instanceof Buffer)) {
-      try {
-        // Si es un objeto, intentamos convertirlo a JSON string
-        responseBody = typeof body === 'object' ? JSON.stringify(body) : String(body);
-      } catch (e) {
-        responseBody = String(body); // Fallback a string simple
+    if (body) {
+      if (Buffer.isBuffer(body)) {
+        responseBodyString = `[Buffer data, length: ${body.length}]`;
+      } else if (typeof body === 'object') {
+        try {
+          responseBodyString = JSON.stringify(body);
+        } catch (e) {
+          responseBodyString = "[Object no serializable]";
+        }
+      } else {
+        responseBodyString = String(body);
       }
-    } else if (body instanceof Buffer) {
-      responseBody = `[Buffer data, length: ${body.length}]`; // O intenta decodificar si sabes el encoding
     }
-    // Llamamos a la función original res.send con los argumentos originales
-    originalSend.apply(res, arguments);
+    originalSend.apply(res, arguments); // Llamamos al método original para enviar la respuesta
   };
 
-
-  // Cuando la respuesta haya terminado de enviarse (evento 'finish')
+  // Cuando la respuesta haya terminado de enviarse
   res.on('finish', async () => {
     const fechaFin = new Date();
-    const diff = process.hrtime(startTime); // [segundos, nanosegundos]
-    const tiempoResMs = Math.round((diff[0] * 1e9 + diff[1]) / 1e6); // Convertir a milisegundos
+    const diff = process.hrtime(startTime);
+    const tiempoResMs = Math.round((diff[0] * 1e9 + diff[1]) / 1e6);
+    const { statusCode } = res;
+    const usuarioInfo = req.user ? (req.user.nombre || String(req.user.id)) : 'Anónimo/Sistema';
 
-    // Limitar la longitud de la petición y respuesta para no saturar la BD
-    const MAX_LENGTH = 10000; // Por ejemplo, 10000 caracteres
-    let peticionLog = req.body ? JSON.stringify(req.body) : null;
+    // Truncado de Petición y Respuesta
+    const MAX_LENGTH = 5000; // Límite de caracteres para logs (ajusta según necesidad)
+    let peticionLog = req.body && Object.keys(req.body).length > 0 ? JSON.stringify(req.body) : null;
     if (peticionLog && peticionLog.length > MAX_LENGTH) {
       peticionLog = peticionLog.substring(0, MAX_LENGTH) + '... [TRUNCATED]';
     }
 
-    let respuestaLog = responseBody;
+    let respuestaLog = responseBodyString;
     if (respuestaLog && respuestaLog.length > MAX_LENGTH) {
       respuestaLog = respuestaLog.substring(0, MAX_LENGTH) + '... [TRUNCATED]';
     }
 
-    const logData = {
-      Servicio: `${req.method} ${req.originalUrl}`,
+    // Datos para el log de Winston (más detallado para el archivo de texto)
+    const winstonLogData = {
+      method: method,
+      url: originalUrl,
+      status: statusCode,
+      responseTimeMs: tiempoResMs,
+      ip: ip,
+      usuario: usuarioInfo,
+      requestQuery: Object.keys(query).length > 0 ? query : undefined, // Solo si hay query params
+      requestBody: peticionLog,   // Cuerpo de la solicitud (puede ser null)
+      responseBody: respuestaLog, // Cuerpo de la respuesta (puede ser undefined)
+      // userAgent: headers['user-agent'] // Ejemplo de otro header útil
+    };
+
+    // Loguear a Winston (esto irá a consola y archivo)
+    // Usamos un mensaje simple y pasamos el resto como metadata.
+    // El formato printf en logger.js se encargará de cómo se muestra.
+    if (statusCode >= 400) {
+      logger.warn(`HTTP Request: ${method} ${originalUrl}`, winstonLogData); // O logger.error si >= 500
+    } else {
+      logger.info(`HTTP Request: ${method} ${originalUrl}`, winstonLogData);
+    }
+
+    // Datos para el log de Base de Datos (como lo tenías)
+    const dbLogData = {
+      Servicio: `${method} ${originalUrl}`,
       Fecha_Inicio: fechaInicio,
       Fecha_Fin: fechaFin,
       Tiempo_Res: tiempoResMs,
       Peticion: peticionLog,
-      Respuesta: respuestaLog, // El cuerpo capturado de la respuesta
-      Ip: req.ip || req.socket.remoteAddress,
-      // Por ahora, el usuario será 'undefined' (se guardará como NULL si la columna lo permite)
-      // Cuando tengas login, aquí pondrías req.user.nombre o req.user.id
-      Usuario: req.user ? (req.user.nombre || req.user.id) : null, // Intentar obtenerlo si ya existe req.user
-      Codigo_Res: res.statusCode
+      Respuesta: respuestaLog,
+      Ip: ip,
+      Usuario: usuarioInfo === 'Anónimo/Sistema' ? null : usuarioInfo,
+      Codigo_Res: statusCode
     };
 
     try {
-      await Log.create(logData);
+      await Log.create(dbLogData);
     } catch (dbError) {
-      console.error('Error al guardar el log en la base de datos:', dbError);
-      // Decide si quieres que un error de logging afecte la respuesta al cliente (probablemente no)
+      // Loguear el error de BD usando Winston
+      logger.error('Error al guardar log detallado en BD:', { 
+        message: dbError.message, 
+        originalError: dbError 
+      });
     }
   });
 
